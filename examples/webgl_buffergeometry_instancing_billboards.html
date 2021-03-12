@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js webgl - instanced particles - billboards - colors</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+
+	<div id="info">
+		<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - instanced circle billboards - colors
+		<div id="notSupported" style="display:none">Sorry, your graphics card + browser does not support hardware instancing</div>
+	</div>
+
+	<script id="vshader" type="x-shader/x-vertex">
+		precision highp float;
+		uniform mat4 modelViewMatrix;
+		uniform mat4 projectionMatrix;
+		uniform float time;
+		uniform sampler2D uTouch;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+		attribute vec2 aUv;
+		attribute vec3 translate;
+
+		varying vec2 vUv;
+		varying float vScale;
+		varying float vDis;
+		varying vec3 vColor;
+		varying vec3 vPos;
+
+		float map(float value, float min1, float max1, float min2, float max2) {
+			return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
+		}
+
+		void main() {
+			vec4 mvPosition = modelViewMatrix * vec4( translate, 1.0 );
+			float f = texture2D(uTouch, vec2(map(translate.x,0.0,1.0, 0.5,0.8),map(translate.y,0.0,1.0, 0.5,1.0))).r;
+
+			// vec3 trTime = vec3(translate.x + time,translate.y + time,translate.z + time);
+			// float scale =  sin( trTime.x * 2.1 ) + sin( trTime.y * 3.2 ) + sin( trTime.z * 4.3 );
+			// vScale = scale;
+			// scale = max(0.8, scale) * 5.0;
+
+			// float scale = 10.0 - ((f - 0.5) * 120.0);
+			float scale = 6.0;
+
+			mvPosition.xyz += vec3(position.x + sin(translate.y + time) * 1.8, position.yz) * scale;
+			float d = f * .3 + .75;
+			float dis = distance(vec4(0,0,0,0), mvPosition);
+			vec4 displaced = vec4(d, d, d, 1.0);
+			gl_Position = projectionMatrix * mvPosition * displaced;
+
+			vUv = uv;
+			vColor = vec3(f);
+			vPos = translate;  // * (f*5.0 + 1.2);
+			vDis = dis;
+		}
+	</script>
+	<script id="fshader" type="x-shader/x-fragment">
+		precision highp float;
+
+		uniform sampler2D map;
+
+		varying vec2 vUv;
+		varying float vScale;
+		varying float vDis;
+		varying vec3 vColor;
+		varying vec3 vPos;
+
+		// HSL to RGB Convertion helpers
+		vec3 HUEtoRGB(float H){
+			H = mod(H,1.0);
+			float R = abs(H * 6.0 - 3.0) - 1.0;
+			float G = 2.0 - abs(H * 6.0 - 2.0);
+			float B = 2.0 - abs(H * 6.0 - 4.0);
+			return clamp(vec3(R,G,B),0.0,1.0);
+		}
+
+		vec3 HSLtoRGB(vec3 HSL){
+			vec3 RGB = HUEtoRGB(HSL.x);
+			float C = (1.0 - abs(2.0 * HSL.z - 1.0)) * HSL.y;
+			return (RGB - 0.5) * C + HSL.z;
+		}
+
+		void main() {
+			vec4 diffuseColor = texture2D( map, vUv );
+			// gl_FragColor = vec4( diffuseColor.xyz * HSLtoRGB(vec3(vScale/5.0, 1.0, 0.5)), diffuseColor.w );
+			// gl_FragColor = vec4(vColor.r,1.0-vColor.r,1.0-vColor.r, 1.0);
+			float z = smoothstep(0.4, 1.0, vPos.z);
+			float dis = 1.0 - pow(vDis * .0004, 3.0);
+			gl_FragColor = diffuseColor * vec4(z * 1.15, z * 1.85, 1.6, 1.0);
+
+			// if ( diffuseColor.w < 0.5 ) discard;
+		}
+	</script>
+
+	<script type="module">
+		import * as THREE from '../build/three.module.js';
+
+		import Stats from './jsm/libs/stats.module.js';
+		import TouchTexture from './js/TouchTexture.js';
+		import Control from "./js/InteractiveControls.js";
+
+		let container, stats;
+
+		let camera, scene, renderer;
+		let geometry, material, mesh;
+		let touch, hitArea;
+		let control
+
+		function init() {
+
+			renderer = new THREE.WebGLRenderer();
+			console.log('renderer: ', renderer);
+
+			if (renderer.capabilities.isWebGL2 === false && renderer.extensions.has('ANGLE_instanced_arrays') === false) {
+
+				document.getElementById('notSupported').style.display = '';
+				return false;
+
+			}
+
+			container = document.createElement('div');
+			document.body.appendChild(container);
+
+			camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 5000);
+			camera.position.z = 1400;
+
+			scene = new THREE.Scene();
+
+			const circleGeometry = new THREE.CircleGeometry(.6, 12);
+
+			geometry = new THREE.InstancedBufferGeometry();
+			geometry.index = circleGeometry.index;
+			geometry.attributes = circleGeometry.attributes;
+
+			// const sg = new THREE.IcosahedronGeometry(1.1, 15)
+
+			const sg = new THREE.TorusKnotGeometry(
+				1,
+				10.8,
+				600,
+				20,
+				5,
+				8
+			)
+			sg.scale(.09,.09,.09)
+			const pos = sg.attributes.position
+			const uv = sg.attributes.uv
+			console.log('sg: ', sg);
+
+			const particleCount = pos.count;
+
+			const translateArray = new Float32Array(particleCount * 3);
+
+			for (let i = 0, i3 = 0, l = particleCount;i < l;i++, i3 += 3) {
+
+				translateArray[i3 + 0] = pos.array[i3 + 0];
+				translateArray[i3 + 1] = pos.array[i3 + 1];
+				translateArray[i3 + 2] = pos.array[i3 + 2];
+
+			}
+
+			const uvArr = new Float32Array(particleCount * 2);
+
+			for (let i = 0, i3 = 0, l = particleCount;i < l;i++, i3 += 2) {
+
+				uvArr[i3 + 0] = uv.array[i3 + 0];
+				uvArr[i3 + 1] = uv.array[i3 + 1];
+
+			}
+
+			geometry.setAttribute('translate', new THREE.InstancedBufferAttribute(translateArray, 3));
+			geometry.setAttribute('aUv', new THREE.InstancedBufferAttribute(uvArr, 2));
+
+			material = new THREE.RawShaderMaterial({
+				uniforms: {
+					"map": { value: new THREE.TextureLoader().load('textures/sprites/circle.png') },
+					"time": { value: 0.0 },
+					"uTouch": { value: null },
+				},
+				vertexShader: document.getElementById('vshader').textContent,
+				fragmentShader: document.getElementById('fshader').textContent,
+				depthTest: true,
+				depthWrite: true
+			});
+
+			mesh = new THREE.Mesh(geometry, material);
+			mesh.scale.set(500, 500, 500);
+			scene.add(mesh);
+
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			container.appendChild(renderer.domElement);
+
+			stats = new Stats();
+			container.appendChild(stats.dom);
+
+			window.addEventListener('resize', onWindowResize);
+
+			control = new Control(camera)
+			control.resize()
+			initTouch()
+			initHitArea()
+			addListeners()
+
+			return true;
+
+		}
+
+		function initTouch() {
+			// create only once
+			if (!touch) touch = new TouchTexture(this);
+			console.log('touch: ', touch);
+			mesh.material.uniforms.uTouch.value = touch.texture;
+		}
+		function initHitArea() {
+			const geometry = new THREE.PlaneGeometry(1160, window.innerHeight, 1, 1);
+			console.log('renderer.domElement.width: ', renderer.domElement.width);
+			const material = new THREE.MeshBasicMaterial({ color: new THREE.Color('red'), wireframe: true, depthTest: false });
+			material.visible = true;
+			hitArea = new THREE.Mesh(geometry, material);
+			scene.add(hitArea);
+		}
+		function addListeners() {
+			control.addListener('interactive-move', onInteractiveMove);
+			control.objects.push(hitArea);
+			control.enable();
+		}
+		function removeListeners() {
+			control.removeListener('interactive-move', onInteractiveMove);
+
+			const index = control.objects.findIndex(obj => obj === hitArea);
+			control.objects.splice(index, 1);
+			control.disable();
+		}
+		function onInteractiveMove(e) {
+			const uv = e.intersectionData.uv;
+			if (touch) touch.addTouch(uv);
+		}
+
+		function onWindowResize() {
+			control.resize()
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize(window.innerWidth, window.innerHeight);
+
+		}
+
+		function animate() {
+
+			requestAnimationFrame(animate);
+
+			render();
+			stats.update();
+
+		}
+
+		function render() {
+			const time = performance.now() * 0.0005;
+			material.uniforms["time"].value = time;
+
+			touch && touch.update(time)
+
+
+			// mesh.rotation.x = time * 0.2;
+			// mesh.rotation.y = time * 0.4;
+
+			renderer.render(scene, camera);
+
+		}
+
+		if (init()) {
+
+			animate();
+
+		}
+	</script>
+
+</body>
+
+</html>
