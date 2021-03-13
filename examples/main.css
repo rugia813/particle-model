@@ -1,6 +1,6 @@
 body {
 	margin: 0;
-	background-color: #000;
+	background: linear-gradient(170deg,#000 10%,#091833 41%,#18191d 80%);
 	color: #fff;
 	font-family: Monospace;
 	font-size: 13px;
