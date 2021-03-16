@@ -26,6 +26,7 @@
 		attribute vec2 uv;
 		attribute vec2 aUv;
 		attribute vec3 translate;
+		attribute float angle;
 
 		varying vec2 vUv;
 		varying float vScale;
@@ -50,9 +51,9 @@
 			float scale = 6.0;
 
 			mvPosition.xyz += vec3(position.x + sin(translate.y + time) * 1.8, position.yz) * scale;
-			float d = f * .3 + .75;
 			float dis = distance(vec4(0,0,0,0), mvPosition);
-			vec4 displaced = vec4(d, d, d, 1.0);
+			float d = cos(angle) * f * .6 + .75;
+			vec4 displaced = vec4(d, d, 1.0, 1.0);
 			gl_Position = projectionMatrix * mvPosition * displaced;
 
 			vUv = uv;
@@ -156,6 +157,7 @@
 			const particleCount = pos.count;
 
 			const translateArray = new Float32Array(particleCount * 3);
+			const anglesArray =  new Float32Array(particleCount);
 
 			for (let i = 0, i3 = 0, l = particleCount;i < l;i++, i3 += 3) {
 
@@ -163,6 +165,7 @@
 				translateArray[i3 + 1] = pos.array[i3 + 1];
 				translateArray[i3 + 2] = pos.array[i3 + 2];
 
+				anglesArray[i] = Math.random() * Math.PI;
 			}
 
 			const uvArr = new Float32Array(particleCount * 2);
@@ -175,6 +178,7 @@
 			}
 
 			geometry.setAttribute('translate', new THREE.InstancedBufferAttribute(translateArray, 3));
+			geometry.setAttribute('angle', new THREE.InstancedBufferAttribute(anglesArray, 1));
 			geometry.setAttribute('aUv', new THREE.InstancedBufferAttribute(uvArr, 2));
 
 			material = new THREE.RawShaderMaterial({
@@ -219,7 +223,7 @@
 			mesh.material.uniforms.uTouch.value = touch.texture;
 		}
 		function initHitArea() {
-			const geometry = new THREE.PlaneGeometry(1160, window.innerHeight, 1, 1);
+			const geometry = new THREE.PlaneGeometry(1160, 950, 1, 1);
 			console.log('renderer.domElement.width: ', renderer.domElement.width);
 			const material = new THREE.MeshBasicMaterial({ color: new THREE.Color('red'), wireframe: true, depthTest: false });
 			material.visible = true;
