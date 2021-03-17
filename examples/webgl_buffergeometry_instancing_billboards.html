@@ -31,11 +31,18 @@
 		varying vec2 vUv;
 		varying float vScale;
 		varying float vDis;
+		varying float vPressure;
 		varying vec3 vColor;
 		varying vec3 vPos;
 
 		float map(float value, float min1, float max1, float min2, float max2) {
 			return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
+		}
+		float rand(float n){return fract(sin(n) * 43758.5453123);}
+		float noise(float p){
+			float fl = floor(p);
+			float fc = fract(p);
+			return mix(rand(fl), rand(fl + 1.0), fc);
 		}
 
 		void main() {
@@ -48,11 +55,11 @@
 			// scale = max(0.8, scale) * 5.0;
 
 			// float scale = 10.0 - ((f - 0.5) * 120.0);
-			float scale = 6.0;
+			float scale = 4.0 + noise(time * 3. + angle * 2.) * 6.;
 
 			mvPosition.xyz += vec3(position.x + sin(translate.y + time) * 1.8, position.yz) * scale;
 			float dis = distance(vec4(0,0,0,0), mvPosition);
-			float d = cos(angle) * f * .6 + .75;
+			float d = cos(angle) * f * .3 + .75;
 			vec4 displaced = vec4(d, d, 1.0, 1.0);
 			gl_Position = projectionMatrix * mvPosition * displaced;
 
@@ -60,18 +67,21 @@
 			vColor = vec3(f);
 			vPos = translate;  // * (f*5.0 + 1.2);
 			vDis = dis;
+			vPressure = f;
 		}
 	</script>
 	<script id="fshader" type="x-shader/x-fragment">
 		precision highp float;
 
 		uniform sampler2D map;
+		uniform float time;
 
 		varying vec2 vUv;
 		varying float vScale;
 		varying float vDis;
 		varying vec3 vColor;
 		varying vec3 vPos;
+		varying float vPressure;
 
 		// HSL to RGB Convertion helpers
 		vec3 HUEtoRGB(float H){
@@ -94,7 +104,8 @@
 			// gl_FragColor = vec4(vColor.r,1.0-vColor.r,1.0-vColor.r, 1.0);
 			float z = smoothstep(0.4, 1.0, vPos.z);
 			float dis = 1.0 - pow(vDis * .0004, 3.0);
-			gl_FragColor = diffuseColor * vec4(z * 1.15, z * 1.85, 1.6, 1.0);
+			vec4 pres = vec4(vPressure * 1.1, vPressure * 1.2, vPressure * 1., 1.0);
+			gl_FragColor = diffuseColor * vec4((z + cos(time*5.) * .1) * 1.15, (z + cos(time*5.) * .1) * 1.85, 1.6, 1.0);
 
 			// if ( diffuseColor.w < 0.5 ) discard;
 		}
