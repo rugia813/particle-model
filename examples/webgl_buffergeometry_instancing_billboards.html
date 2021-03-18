@@ -23,6 +23,7 @@
 		uniform sampler2D uTouch;
 
 		attribute vec3 position;
+		attribute vec3 ico;
 		attribute vec2 uv;
 		attribute vec2 aUv;
 		attribute vec3 translate;
@@ -46,8 +47,10 @@
 		}
 
 		void main() {
-			vec4 mvPosition = modelViewMatrix * vec4( translate, 1.0 );
-			float f = texture2D(uTouch, vec2(map(translate.x,0.0,1.0, 0.5,0.8),map(translate.y,0.0,1.0, 0.5,1.0))).r;
+			vec3 step = (ico - translate);
+			vec4 cur = vec4( translate + (step * clamp(log(time * 4.), 0.0, 1.0)), 1.0 );
+			vec4 mvPosition = modelViewMatrix * cur;
+			float f = texture2D(uTouch, vec2(map(cur.x,0.0,1.0, 0.5,0.8),map(cur.y,0.0,1.0, 0.5,1.0))).r;
 
 			// vec3 trTime = vec3(translate.x + time,translate.y + time,translate.z + time);
 			// float scale =  sin( trTime.x * 2.1 ) + sin( trTime.y * 3.2 ) + sin( trTime.z * 4.3 );
@@ -57,10 +60,11 @@
 			// float scale = 10.0 - ((f - 0.5) * 120.0);
 			float scale = 4.0 + noise(time * 3. + angle * 2.) * 6.;
 
-			mvPosition.xyz += vec3(position.x + sin(translate.y + time) * 1.8, position.yz) * scale;
+			mvPosition.xyz += vec3(position.x + sin(translate.y + time) * 1.8, position.y + 1. - 6. * cos(angle) * f, position.z) * scale;
 			float dis = distance(vec4(0,0,0,0), mvPosition);
-			float d = cos(angle) * f * .3 + .75;
-			vec4 displaced = vec4(d, d, 1.0, 1.0);
+			float d = noise(sin(angle)) * f + .75;
+			float z = noise(cos(angle)) * f + .75;
+			vec4 displaced = vec4(d, z, 1.0, 1.0);
 			gl_Position = projectionMatrix * mvPosition * displaced;
 
 			vUv = uv;
@@ -105,7 +109,8 @@
 			float z = smoothstep(0.4, 1.0, vPos.z);
 			float dis = 1.0 - pow(vDis * .0004, 3.0);
 			vec4 pres = vec4(vPressure * 1.1, vPressure * 1.2, vPressure * 1., 1.0);
-			gl_FragColor = diffuseColor * vec4((z + cos(time*5.) * .1) * 1.15, (z + cos(time*5.) * .1) * 1.85, 1.6, 1.0);
+			float d = z + cos(time*5.) * .1;
+			gl_FragColor = diffuseColor * vec4(d * 1.15, d * 1.85, 1.6, 1.0) + pres;
 
 			// if ( diffuseColor.w < 0.5 ) discard;
 		}
@@ -150,7 +155,7 @@
 			geometry.index = circleGeometry.index;
 			geometry.attributes = circleGeometry.attributes;
 
-			// const sg = new THREE.IcosahedronGeometry(1.1, 15)
+			const ico = new THREE.IcosahedronGeometry(1.1, 14)
 
 			const sg = new THREE.TorusKnotGeometry(
 				1,
@@ -162,13 +167,23 @@
 			)
 			sg.scale(.09,.09,.09)
 			const pos = sg.attributes.position
+			const icoPos = ico.attributes.position
 			const uv = sg.attributes.uv
 			console.log('sg: ', sg);
 
 			const particleCount = pos.count;
+			const icoCount = icoPos.count;
 
 			const translateArray = new Float32Array(particleCount * 3);
+			const icoArray = new Float32Array(icoCount * 3);
 			const anglesArray =  new Float32Array(particleCount);
+
+			for (let i = 0, i3 = 0, l = icoCount;i < l;i++, i3 += 3) {
+
+				icoArray[i3 + 0] = icoPos.array[i3 + 0];
+				icoArray[i3 + 1] = icoPos.array[i3 + 1];
+				icoArray[i3 + 2] = icoPos.array[i3 + 2];
+			}
 
 			for (let i = 0, i3 = 0, l = particleCount;i < l;i++, i3 += 3) {
 
@@ -189,6 +204,7 @@
 			}
 
 			geometry.setAttribute('translate', new THREE.InstancedBufferAttribute(translateArray, 3));
+			geometry.setAttribute('ico', new THREE.InstancedBufferAttribute(icoArray, 3));
 			geometry.setAttribute('angle', new THREE.InstancedBufferAttribute(anglesArray, 1));
 			geometry.setAttribute('aUv', new THREE.InstancedBufferAttribute(uvArr, 2));
 
