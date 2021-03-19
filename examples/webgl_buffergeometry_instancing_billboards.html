@@ -21,6 +21,8 @@
 		uniform mat4 projectionMatrix;
 		uniform float time;
 		uniform sampler2D uTouch;
+		uniform bool toggle;
+		uniform float timeOffset;
 
 		attribute vec3 position;
 		attribute vec3 ico;
@@ -42,10 +44,19 @@
 			float fc = fract(p);
 			return mix(rand(fl), rand(fl + 1.0), fc);
 		}
+		float exponentialInOut(float t) {
+			return t == 0.0 || t == 1.0
+				? t
+				: t < 0.5
+					? +0.5 * pow(2.0, (20.0 * t) - 10.0)
+					: -0.5 * pow(2.0, 10.0 - (t * 20.0)) + 1.0;
+		}
 
 		void main() {
-			vec3 step = (ico - translate);
-			vec4 cur = vec4( translate + (step * clamp(log(time * 4.), 0.0, 1.0)), 1.0 );
+			vec3 from = (toggle == true) ? translate : ico;
+			vec3 to = (toggle == true) ? ico : translate;
+			vec3 step = (to - from);
+			vec4 cur = vec4( from + (step * exponentialInOut(clamp((time - timeOffset) * 1., 0.0, 1.0))), 1.0 );
 			vec4 mvPosition = modelViewMatrix * cur;
 			float f = texture2D(uTouch, vec2(map(cur.x,0.0,1.0, 0.5,0.8),map(cur.y,0.0,1.0, 0.5,1.0))).r;
 
@@ -181,6 +192,8 @@
 					"map": { value: new THREE.TextureLoader().load('textures/sprites/circle.png') },
 					"time": { value: 0.0 },
 					"uTouch": { value: null },
+					"toggle": { value: false },
+					"timeOffset": { value: 0 },
 				},
 				vertexShader: document.getElementById('vshader').textContent,
 				fragmentShader: document.getElementById('fshader').textContent,
@@ -210,6 +223,11 @@
 			return true;
 
 		}
+		function toggleModel() {
+			const timeOffset = performance.now() * 0.0005
+			material.uniforms["toggle"].value = !material.uniforms["toggle"].value;
+			material.uniforms["timeOffset"].value = timeOffset;
+		}
 
 		function initTouch() {
 			// create only once
@@ -227,6 +245,7 @@
 		}
 		function addListeners() {
 			control.addListener('interactive-move', onInteractiveMove);
+			document.body.addEventListener('click', toggleModel);
 			control.objects.push(hitArea);
 			control.enable();
 		}
