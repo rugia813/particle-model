@@ -51,14 +51,22 @@
 					? +0.5 * pow(2.0, (20.0 * t) - 10.0)
 					: -0.5 * pow(2.0, 10.0 - (t * 20.0)) + 1.0;
 		}
+		vec2 rotate(vec2 v, float a) {
+			float s = sin(a);
+			float c = cos(a);
+			mat2 m = mat2(c, s, -s, c);
+			return m * v;
+		}
 
 		void main() {
 			vec3 from = (toggle == true) ? translate : ico;
 			vec3 to = (toggle == true) ? ico : translate;
 			vec3 step = (to - from);
 			vec4 cur = vec4( from + (step * exponentialInOut(clamp((time - timeOffset) * 1., 0.0, 1.0))), 1.0 );
+			vec2 p = rotate(cur.xz, time); // 1 deg = 0.017472222222222222
+			cur.xz = p.xy;
 			vec4 mvPosition = modelViewMatrix * cur;
-			float f = texture2D(uTouch, vec2(map(cur.x,0.0,1.0, 0.5,0.8),map(cur.y,0.0,1.0, 0.5,1.0))).r;
+			float f = texture2D(uTouch, vec2(map(p.x,0.0,1.0, 0.5,0.8),map(cur.y,0.0,1.0, 0.5,1.0))).r;
 
 			// float scale = 10.0 - ((f - 0.5) * 120.0);
 			float scale = 4.0 + noise(time * 3. + angle * 2.) * 6.;
@@ -282,6 +290,7 @@
 
 		function render() {
 			const time = performance.now() * 0.0005;
+			window.t = time
 			material.uniforms["time"].value = time;
 
 			touch && touch.update(time)
